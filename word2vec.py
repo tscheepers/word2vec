@@ -1,8 +1,10 @@
 import math
+import sys
 import numpy as np
 
 
 def train(fi, fo, neg, dim, starting_alpha, win, min_count):
+
     # Read train file to init vocab
     vocab = Vocabulary(fi, min_count)
 
@@ -11,23 +13,16 @@ def train(fi, fo, neg, dim, starting_alpha, win, min_count):
     nn1 = np.zeros(shape=(len(vocab), dim))
 
     global_word_count = 0
-
-    print 'Initializing unigram table'
     table = TableForNegativeSamples(vocab)
 
     fi = open(fi, 'r')
 
     alpha = starting_alpha
-
     word_count = 0
     last_word_count = 0
 
     for line in fi:
-        # Skip blank lines
-        if not line:
-            continue
 
-        # Init tokens, a list of indices of words in line
         tokens = vocab.indices(['{startofline}'] + line.split() + ['{endofline}'])
 
         for token_idx, token in enumerate(tokens):
@@ -39,11 +34,8 @@ def train(fi, fo, neg, dim, starting_alpha, win, min_count):
                 alpha = starting_alpha * (1 - float(global_word_count) / vocab.word_count)
                 if alpha < starting_alpha * 0.0001: alpha = starting_alpha * 0.0001
 
-                # Print progress info
-                # sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-                #                  (alpha, global_word_count, vocab.word_count,
-                #                   float(global_word_count) / vocab.word_count * 100))
-                # sys.stdout.flush()
+                sys.stdout.write("\rProgress: %d of %d" % (global_word_count, vocab.word_count))
+                sys.stdout.flush()
 
             # Randomize window size, where win is the max window size
             current_win = np.random.randint(low=1, high=win+1)
@@ -67,12 +59,9 @@ def train(fi, fo, neg, dim, starting_alpha, win, min_count):
 
             word_count += 1
 
-    # Print progress info
     global_word_count += (word_count - last_word_count)
-    # sys.stdout.write("\rAlpha: %f Progress: %d of %d (%.2f%%)" %
-    #                  (alpha, global_word_count, vocab.word_count,
-    #                   float(global_word_count)/vocab.word_count * 100))
-    # sys.stdout.flush()
+    sys.stdout.write("\rProgress: %d of %d" % (global_word_count, vocab.word_count))
+    sys.stdout.flush()
     # fi.close()
 
     # Save model to file
@@ -92,7 +81,7 @@ class Vocabulary:
         word_count = 0
         fi = open(fi, 'r')
 
-        # Add special token {startofline} (beginning of line) {endofline} (end of line)
+        # Add special token for start of line and end of line
         for token in ['{startofline}', '{endofline}']:
             vocab_hash[token] = len(vocab_items)
             vocab_items.append(Word(token))
@@ -103,12 +92,9 @@ class Vocabulary:
                 if token not in vocab_hash:
                     vocab_hash[token] = len(vocab_items)
                     vocab_items.append(Word(token))
-                    
-                #assert vocab_items[vocab_hash[token]].word == token, 'Wrong vocab_hash index'
                 vocab_items[vocab_hash[token]].count += 1
                 word_count += 1
 
-            # Add special token {startofline} (beginning of line) {endofline} (end of line)
             vocab_items[vocab_hash['{startofline}']].count += 1
             vocab_items[vocab_hash['{endofline}']].count += 1
             word_count += 2
@@ -117,31 +103,11 @@ class Vocabulary:
         self.vocab_hash = vocab_hash           # Mapping from each token to its index in vocab
         self.word_count = word_count           # Total number of words in train file
 
-        # Add special to{rare}unk> (unknown),
-        # merge words occurring less than min_count i{rare}unk>, and
-        # sort vocab in descending order by frequency in train file
-        self.__sort(min_count)
-
-        # print 'Total words in training file: %d' % self.word_count
-        # print 'Vocab size: %d' % len(self)
-
-    def __getitem__(self, i):
-        return self.vocab_items[i]
-
-    def __len__(self):
-        return len(self.vocab_items)
-
-    def __iter__(self):
-        return iter(self.vocab_items)
-
-    def __contains__(self, key):
-        return key in self.vocab_hash
-
-    def __sort(self, min_count):
+        # Remove rare words and sort
         tmp = []
         tmp.append(Word('{rare}'))
         unk_hash = 0
-        
+
         count_unk = 0
         for token in self.vocab_items:
             if token.count < min_count:
@@ -160,26 +126,30 @@ class Vocabulary:
         self.vocab_items = tmp
         self.vocab_hash = vocab_hash
 
-        # print
-        # print 'Unknown vocab size:', count_unk
+    def __getitem__(self, i):
+        return self.vocab_items[i]
+
+    def __len__(self):
+        return len(self.vocab_items)
+
+    def __iter__(self):
+        return iter(self.vocab_items)
+
+    def __contains__(self, key):
+        return key in self.vocab_hash
 
     def indices(self, tokens):
         return [self.vocab_hash[token] if token in self else self.vocab_hash['{rare}'] for token in tokens]
 
 
 class TableForNegativeSamples:
-    """
-    A list of indices of tokens in the vocab following a power law distribution,
-    used to draw negative samples.
-    """
     def __init__(self, vocab):
         power = 0.75
-        norm = sum([math.pow(t.count, power) for t in vocab]) # Normalizing cons
+        norm = sum([math.pow(t.count, power) for t in vocab]) # Normalizing constants
 
-        table_size = 1e8 # Length of the unigram tableable
+        table_size = 1e8
         table = np.zeros(table_size, dtype=np.uint32)
 
-        print 'Filling unigram table'
         p = 0 # Cumulative probability
         i = 0
         for j, unigram in enumerate(vocab):
@@ -203,7 +173,6 @@ def sigmoid(z):
 
 
 def save(vocab, nn0, fo):
-    print 'Saving model to', fo
     dim = len(nn0[0])
     fo = open(fo, 'w')
     fo.write('%d %d\n' % (len(nn0), dim))
