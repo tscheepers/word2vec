@@ -76,32 +76,32 @@ class Word:
 
 class Vocabulary:
     def __init__(self, fi, min_count):
-        vocab_items = []
-        vocab_hash = {}
+        words = []
+        word_map = {}
         word_count = 0
         fi = open(fi, 'r')
 
         # Add special token for start of line and end of line
         for token in ['{startofline}', '{endofline}']:
-            vocab_hash[token] = len(vocab_items)
-            vocab_items.append(Word(token))
+            word_map[token] = len(words)
+            words.append(Word(token))
 
         for line in fi:
             tokens = line.split()
             for token in tokens:
-                if token not in vocab_hash:
-                    vocab_hash[token] = len(vocab_items)
-                    vocab_items.append(Word(token))
-                vocab_items[vocab_hash[token]].count += 1
+                if token not in word_map:
+                    word_map[token] = len(words)
+                    words.append(Word(token))
+                words[word_map[token]].count += 1
                 word_count += 1
 
-            vocab_items[vocab_hash['{startofline}']].count += 1
-            vocab_items[vocab_hash['{endofline}']].count += 1
+            words[word_map['{startofline}']].count += 1
+            words[word_map['{endofline}']].count += 1
             word_count += 2
 
-        self.vocab_items = vocab_items         # List of VocabItem objects
-        self.vocab_hash = vocab_hash           # Mapping from each token to its index in vocab
-        self.word_count = word_count           # Total number of words in train file
+        self.words = words
+        self.word_map = word_map # Mapping from each token to its index in vocab
+        self.word_count = word_count # Total number of words in train file
 
         # Remove rare words and sort
         tmp = []
@@ -109,7 +109,7 @@ class Vocabulary:
         unk_hash = 0
 
         count_unk = 0
-        for token in self.vocab_items:
+        for token in self.words:
             if token.count < min_count:
                 count_unk += 1
                 tmp[unk_hash].count += token.count
@@ -118,28 +118,28 @@ class Vocabulary:
 
         tmp.sort(key=lambda token : token.count, reverse=True)
 
-        # Update vocab_hash
-        vocab_hash = {}
+        # Update word_map
+        word_map = {}
         for i, token in enumerate(tmp):
-            vocab_hash[token.word] = i
+            word_map[token.word] = i
 
-        self.vocab_items = tmp
-        self.vocab_hash = vocab_hash
+        self.words = tmp
+        self.word_map = word_map
 
     def __getitem__(self, i):
-        return self.vocab_items[i]
+        return self.words[i]
 
     def __len__(self):
-        return len(self.vocab_items)
+        return len(self.words)
 
     def __iter__(self):
-        return iter(self.vocab_items)
+        return iter(self.words)
 
     def __contains__(self, key):
-        return key in self.vocab_hash
+        return key in self.word_map
 
     def indices(self, tokens):
-        return [self.vocab_hash[token] if token in self else self.vocab_hash['{rare}'] for token in tokens]
+        return [self.word_map[token] if token in self else self.word_map['{rare}'] for token in tokens]
 
 
 class TableForNegativeSamples:
