@@ -187,16 +187,13 @@ def sigmoid(z):
         return 1 / (1 + math.exp(-z))
 
 
-def save(vocab, nn0, fo):
-    dim = len(nn0[0])
-    fo = open(fo, 'w')
-    # fo.write('%d %d\n' % (len(nn0), dim))
+def save(vocab, nn0, filename):
+    file_pointer = open(filename, 'w')
     for token, vector in zip(vocab, nn0):
         word = token.word
         vector_str = ' '.join([str(s) for s in vector])
-        fo.write('%s %s\n' % (word, vector_str))
-
-    fo.close()
+        file_pointer.write('%s %s\n' % (word, vector_str))
+    file_pointer.close()
 
 if __name__ == '__main__':
 
@@ -233,23 +230,26 @@ if __name__ == '__main__':
     word_count = 0
     last_word_count = 0
 
-    for token_idx, token in enumerate(corpus):
+    tokens = vocab.indices(corpus)
+
+    for token_idx, token in enumerate(tokens):
         if word_count % 10000 == 0:
             global_word_count += (word_count - last_word_count)
             last_word_count = word_count
 
             # Recalculate alpha
             alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
-            if alpha < initial_alpha * 0.0001: alpha = initial_alpha * 0.0001
+            if alpha < initial_alpha * 0.0001:
+                alpha = initial_alpha * 0.0001
 
-            sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
             sys.stdout.flush()
+            sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
 
         # Randomize window size, where win is the max window size
         current_window = np.random.randint(low=1, high=window+1)
         context_start = max(token_idx - current_window, 0)
-        context_end = min(token_idx + current_window + 1, len(corpus))
-        context = corpus.tokens[context_start:token_idx] + corpus.tokens[token_idx+1:context_end] # Turn into an iterator?
+        context_end = min(token_idx + current_window + 1, len(tokens))
+        context = tokens[context_start:token_idx] + tokens[token_idx+1:context_end] # Turn into an iterator?
 
         for context_word in context:
             # Init neu1e with zeros
@@ -268,8 +268,8 @@ if __name__ == '__main__':
         word_count += 1
 
     global_word_count += (word_count - last_word_count)
-    sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
     sys.stdout.flush()
+    print "\rTraining finished: %d" % global_word_count
 
     # Save model to file
     save(vocab, nn0, 'output')
