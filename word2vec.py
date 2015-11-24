@@ -13,6 +13,10 @@ class Ngram:
     def __init__(self, ngrams):
         self.ngrams = ngrams
         self.count = 0
+        self.score = 0.0
+
+    def set_score(self, score):
+        self.score = score
 
 
 class Corpus:
@@ -117,6 +121,24 @@ class Vocabulary:
             sys.stdout.flush()
             print "\r%d-grams built: %d" % (n, i)
 
+        # http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf
+        i = 0
+        for ngram in ngrams:
+            product = 1
+            for word_string in ngram.ngrams:
+                word = self.words[self.word_map[word_string]]
+                product *= word.count
+            delta = 0
+            ngram.set_score((float(ngram.count) - delta) / float(product))
+
+            i += 1
+            if i % 10000 == 0:
+                sys.stdout.flush()
+                sys.stdout.write("\rScoring n-grams: %d" % i)
+
+        sys.stdout.flush()
+        print "\rScored n-grams: %d" % i
+
         self.ngrams = ngrams
         self.ngram_map = ngram_map
 
@@ -181,6 +203,7 @@ class TableForNegativeSamples:
     def sample(self, count):
         indices = np.random.randint(low=0, high=len(self.table), size=count)
         return [self.table[i] for i in indices]
+
 
 def sigmoid(z):
     if z > 6:
