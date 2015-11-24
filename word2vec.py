@@ -8,53 +8,75 @@ class Word:
         self.word = word
         self.count = 0
 
+
 class Ngram:
     def __init__(self, ngrams):
         self.ngrams = ngrams
         self.count = 0
 
 
+class Corpus:
+    def __init__(self, filename):
+        i = 0
+        file_pointer = open(filename, 'r')
+
+        all_tokens = []
+
+        for line in file_pointer:
+            line_tokens = line.split()
+            for token in line_tokens:
+                all_tokens.append(token)
+
+                i += 1
+                if i % 10000 == 0:
+                    sys.stdout.flush()
+                    sys.stdout.write("\rReading corpus: %d" % i)
+
+        sys.stdout.flush()
+        print "\rCorpus read: %d" % i
+
+        file_pointer.close()
+
+        self.tokens = all_tokens
+
+    def __getitem__(self, i):
+        return self.tokens[i]
+
+    def __len__(self):
+        return len(self.tokens)
+
+    def __iter__(self):
+        return iter(self.tokens)
+
+
 class Vocabulary:
-    def __init__(self, filename, min_count):
+    def __init__(self, corpus, min_count):
         self.words = []
         self.word_map = {}
-        self.buildWords(filename, min_count)
+        self.buildWords(corpus, min_count)
 
         self.ngrams = []
         self.ngram_map = {}
-        self.buildNgrams(filename)
+        self.buildNgrams(corpus)
 
-    def buildWords(self, filename, min_count):
+    def buildWords(self, corpus, min_count):
         words = []
         word_map = {}
-        word_count = 0
-        filepointer = open(filename, 'r')
 
-        # Add special token for start of line and end of line
-        for token in ['{startofline}', '{endofline}']:
-            word_map[token] = len(words)
-            words.append(Word(token))
+        i = 0
+        for token in corpus:
+            if token not in word_map:
+                word_map[token] = len(words)
+                words.append(Word(token))
+            words[word_map[token]].count += 1
 
-        for line in filepointer:
-            tokens = line.split()
-            for token in tokens:
-                if token not in word_map:
-                    word_map[token] = len(words)
-                    words.append(Word(token))
-                words[word_map[token]].count += 1
-                word_count += 1
-
-            words[word_map['{startofline}']].count += 1
-            words[word_map['{endofline}']].count += 1
-            word_count += 2
-
-            if word_count % 10000 == 0:
+            i += 1
+            if i % 10000 == 0:
                 sys.stdout.flush()
-                sys.stdout.write("\rBuilding vocabulary: %d" % word_count)
+                sys.stdout.write("\rBuilding vocabulary: %d" % i)
 
         sys.stdout.flush()
-
-        print "\rVocabulary built: %d" % word_count
+        print "\rVocabulary built: %d" % i
 
         self.words = words
         self.word_map = word_map # Mapping from each token to its index in vocab
@@ -82,42 +104,39 @@ class Vocabulary:
         self.words = tmp
         self.word_map = word_map
 
-    def buildNgrams(self, filename):
+    def buildNgrams(self, corpus):
 
         ngrams = []
         ngram_map = {}
-        ngram_count = 0
 
         # Build ngram map
         for n in range(2, 4):
-            filepointer = open(filename, 'r')
-            for line in filepointer:
-                tokens = line.split()
-                ngram_l = []
-                for token in tokens:
-                    if len(ngram_l) < n:
-                        ngram_l.append(token)
-                        continue
-
-                    if len(ngram_l) == n:
-                        ngram_l.pop(0)
-
+            i = 0
+            ngram_l = []
+            for token in corpus:
+                if len(ngram_l) < n:
                     ngram_l.append(token)
-                    ngram_t = tuple(ngram_l)
+                    continue
 
-                    if ngram_t not in ngram_map:
-                        ngram_map[ngram_t] = len(ngrams)
-                        ngrams.append(Ngram(ngram_t))
+                if len(ngram_l) == n:
+                    ngram_l.pop(0)
 
-                    ngrams[ngram_map[ngram_t]].count += 1
+                ngram_l.append(token)
+                ngram_t = tuple(ngram_l)
 
-                    ngram_count += 1
-                    if ngram_count % 10000 == 0:
-                        sys.stdout.flush()
-                        sys.stdout.write("\rBuilding %d-grams: %d" % (n, ngram_count))
+                if ngram_t not in ngram_map:
+                    ngram_map[ngram_t] = len(ngrams)
+                    ngrams.append(Ngram(ngram_t))
+
+                ngrams[ngram_map[ngram_t]].count += 1
+
+                i += 1
+                if i % 10000 == 0:
+                    sys.stdout.flush()
+                    sys.stdout.write("\rBuilding %d-grams: %d" % (n, i))
 
             sys.stdout.flush()
-            print "\r%d-grams built: %d" % (n, ngram_count)
+            print "\r%d-grams built: %d" % (n, i)
 
         self.ngrams = ngrams
         self.ngram_map = ngram_map
@@ -193,8 +212,11 @@ if __name__ == '__main__':
     # Min count for words to be used in the model, else {rare}
     min_count = 5
 
+    # Read the corpus
+    corpus = Corpus('text-aa')
+
     # Read train file to init vocab
-    vocab = Vocabulary('text-aa', min_count)
+    vocab = Vocabulary(corpus, min_count)
 
     # Initialize network
     nn0 = np.random.uniform(low=-0.5/dim, high=0.5/dim, size=(len(vocab), dim))
@@ -202,8 +224,6 @@ if __name__ == '__main__':
 
     global_word_count = 0
     table = TableForNegativeSamples(vocab)
-
-    input_file = open('text-aa', 'r')
 
     # Initial learning rate
     initial_alpha = 0.025
@@ -213,49 +233,43 @@ if __name__ == '__main__':
     word_count = 0
     last_word_count = 0
 
-    for line in input_file:
+    for token_idx, token in enumerate(corpus):
+        if word_count % 10000 == 0:
+            global_word_count += (word_count - last_word_count)
+            last_word_count = word_count
 
-        tokens = vocab.indices(['{startofline}'] + line.split() + ['{endofline}'])
+            # Recalculate alpha
+            alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
+            if alpha < initial_alpha * 0.0001: alpha = initial_alpha * 0.0001
 
-        for token_idx, token in enumerate(tokens):
-            if word_count % 10000 == 0:
-                global_word_count += (word_count - last_word_count)
-                last_word_count = word_count
+            sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
+            sys.stdout.flush()
 
-                # Recalculate alpha
-                alpha = initial_alpha * (1 - float(global_word_count) / vocab.word_count)
-                if alpha < initial_alpha * 0.0001: alpha = initial_alpha * 0.0001
+        # Randomize window size, where win is the max window size
+        current_window = np.random.randint(low=1, high=window+1)
+        context_start = max(token_idx - current_window, 0)
+        context_end = min(token_idx + current_window + 1, len(corpus))
+        context = corpus.tokens[context_start:token_idx] + corpus.tokens[token_idx+1:context_end] # Turn into an iterator?
 
-                sys.stdout.write("\rTraining: %d of %d" % (global_word_count, vocab.word_count))
-                sys.stdout.flush()
+        for context_word in context:
+            # Init neu1e with zeros
+            neu1e = np.zeros(dim)
+            classifiers = [(token, 1)] + [(target, 0) for target in table.sample(k_negative_sampling)]
+            for target, label in classifiers:
+                z = np.dot(nn0[context_word], nn1[target])
+                p = sigmoid(z)
+                g = alpha * (label - p)
+                neu1e += g * nn1[target]              # Error to backpropagate to nn0
+                nn1[target] += g * nn0[context_word] # Update nn1
 
-            # Randomize window size, where win is the max window size
-            current_window = np.random.randint(low=1, high=window+1)
-            context_start = max(token_idx - current_window, 0)
-            context_end = min(token_idx + current_window + 1, len(tokens))
-            context = tokens[context_start:token_idx] + tokens[token_idx+1:context_end] # Turn into an iterator?
+            # Update nn0
+            nn0[context_word] += neu1e
 
-            for context_word in context:
-                # Init neu1e with zeros
-                neu1e = np.zeros(dim)
-                classifiers = [(token, 1)] + [(target, 0) for target in table.sample(k_negative_sampling)]
-                for target, label in classifiers:
-                    z = np.dot(nn0[context_word], nn1[target])
-                    p = sigmoid(z)
-                    g = alpha * (label - p)
-                    neu1e += g * nn1[target]              # Error to backpropagate to nn0
-                    nn1[target] += g * nn0[context_word] # Update nn1
-
-                # Update nn0
-                nn0[context_word] += neu1e
-
-            word_count += 1
+        word_count += 1
 
     global_word_count += (word_count - last_word_count)
-    sys.stdout.write("\rTraining: %d of %d" % (global_word_count, vocab.word_count))
+    sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
     sys.stdout.flush()
-
-    input_file.close()
 
     # Save model to file
     save(vocab, nn0, 'output')
