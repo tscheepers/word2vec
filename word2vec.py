@@ -53,13 +53,15 @@ class Vocabulary:
     def __init__(self, corpus, min_count):
         self.words = []
         self.word_map = {}
-        self.buildWords(corpus, min_count)
+        self.build_words(corpus, min_count)
 
         self.ngrams = []
         self.ngram_map = {}
-        self.buildNgrams(corpus)
+        self.build_ngrams(corpus, 3)
 
-    def buildWords(self, corpus, min_count):
+        self.filter_for_rare_and_common()
+
+    def build_words(self, corpus, min_count):
         words = []
         word_map = {}
 
@@ -81,36 +83,13 @@ class Vocabulary:
         self.words = words
         self.word_map = word_map # Mapping from each token to its index in vocab
 
-        # Remove rare words and sort
-        tmp = []
-        tmp.append(Word('{rare}'))
-        unk_hash = 0
-
-        count_unk = 0
-        for token in self.words:
-            if token.count < min_count:
-                count_unk += 1
-                tmp[unk_hash].count += token.count
-            else:
-                tmp.append(token)
-
-        tmp.sort(key=lambda token : token.count, reverse=True)
-
-        # Update word_map
-        word_map = {}
-        for i, token in enumerate(tmp):
-            word_map[token.word] = i
-
-        self.words = tmp
-        self.word_map = word_map
-
-    def buildNgrams(self, corpus):
+    def build_ngrams(self, corpus, n):
 
         ngrams = []
         ngram_map = {}
 
         # Build ngram map
-        for n in range(2, 4):
+        for n in range(2, n + 1):
             i = 0
             ngram_l = []
             for token in corpus:
@@ -155,6 +134,31 @@ class Vocabulary:
 
     def indices(self, tokens):
         return [self.word_map[token] if token in self else self.word_map['{rare}'] for token in tokens]
+
+    def filter_for_rare_and_common(self):
+        # Remove rare words and sort
+        tmp = []
+        tmp.append(Word('{rare}'))
+        unk_hash = 0
+
+        count_unk = 0
+        for token in self.words:
+            if token.count < min_count:
+                count_unk += 1
+                tmp[unk_hash].count += token.count
+            else:
+                tmp.append(token)
+
+        tmp.sort(key=lambda token : token.count, reverse=True)
+
+        # Update word_map
+        word_map = {}
+        for i, token in enumerate(tmp):
+            word_map[token.word] = i
+
+        self.words = tmp
+        self.word_map = word_map
+        pass
 
 
 class TableForNegativeSamples:
