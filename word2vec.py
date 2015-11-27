@@ -3,11 +3,6 @@ import sys
 import numpy as np
 
 
-class Word:
-    def __init__(self, word):
-        self.word = word
-        self.count = 0
-
 class Ngram:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -22,7 +17,7 @@ class Ngram:
 
 
 class Corpus:
-    def __init__(self, filename):
+    def __init__(self, filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold):
         i = 0
         file_pointer = open(filename, 'r')
 
@@ -45,10 +40,10 @@ class Corpus:
 
         self.tokens = all_tokens
 
-        self.build_ngrams(1)
-        self.build_ngrams(2)
+        for x in range(0,word_phrase_passes):
+            self.build_ngrams(x, word_phrase_delta, word_phrase_threshold)
 
-    def build_ngrams(self, n):
+    def build_ngrams(self, x, word_phrase_delta, word_phrase_threshold):
 
         ngrams = []
         ngram_map = {}
@@ -79,10 +74,10 @@ class Corpus:
             i += 1
             if i % 10000 == 0:
                 sys.stdout.flush()
-                sys.stdout.write("\rBuilding n-grams (%d pass): %d" % (n, i))
+                sys.stdout.write("\rBuilding n-grams (%d pass): %d" % (x, i))
 
         sys.stdout.flush()
-        print "\rn-grams (%d pass) built: %d" % (n, i)
+        print "\rn-grams (%d pass) built: %d" % (x, i)
 
         filtered_ngrams_map = {}
 
@@ -92,10 +87,9 @@ class Corpus:
             product = 1
             for word_string in ngram.tokens:
                 product *= token_count_map[word_string]
-            delta = 3
-            ngram.set_score((float(ngram.count) - delta) / float(product))
+            ngram.set_score((float(ngram.count) - word_phrase_delta) / float(product))
 
-            if ngram.score > .001:
+            if ngram.score > word_phrase_threshold:
                 filtered_ngrams_map[ngram.get_string()] = ngram
 
             i += 1
@@ -106,6 +100,7 @@ class Corpus:
         sys.stdout.flush()
         print "\rScored n-grams: %d, filtered n-grams: %d" % (i, len(filtered_ngrams_map))
 
+        # Combining the tokens
         all_tokens = []
         i = 0
 
@@ -121,7 +116,7 @@ class Corpus:
                     ngram = filtered_ngrams_map[ngram_string]
                     all_tokens.append(ngram.get_string())
                     i += 2
-                    #print "Combining tokens for n-gram: %s" % ngram.get_string()
+                    # print "Combining tokens for n-gram: %s" % ngram.get_string()
                 else:
                     all_tokens.append(self.tokens[i])
                     i += 1
@@ -141,6 +136,12 @@ class Corpus:
 
     def __iter__(self):
         return iter(self.tokens)
+
+
+class Word:
+    def __init__(self, word):
+        self.word = word
+        self.count = 0
 
 
 class Vocabulary:
@@ -165,10 +166,10 @@ class Vocabulary:
             i += 1
             if i % 10000 == 0:
                 sys.stdout.flush()
-                sys.stdout.write("\rBuilding vocabulary: %d" % i)
+                sys.stdout.write("\rBuilding vocabulary: %d" % len(words))
 
         sys.stdout.flush()
-        print "\rVocabulary built: %d" % i
+        print "\rVocabulary built: %d" % len(words)
 
         self.words = words
         self.word_map = word_map # Mapping from each token to its index in vocab
@@ -268,8 +269,17 @@ if __name__ == '__main__':
     # Min count for words to be used in the model, else {rare}
     min_count = 2
 
+    # Number of word phrase passes
+    word_phrase_passes = 2
+
+    # min count for word phrase formula
+    word_phrase_delta = 3
+
+    # Threshold for something
+    word_phrase_threshold = 1e-3
+
     # Read the corpus
-    corpus = Corpus('text-large')
+    corpus = Corpus('input', word_phrase_passes, word_phrase_delta, word_phrase_threshold)
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
@@ -319,7 +329,7 @@ if __name__ == '__main__':
                 p = sigmoid(z)
                 g = alpha * (label - p)
                 neu1e += g * nn1[target]              # Error to backpropagate to nn0
-                nn1[target] += g * nn0[context_word] # Update nn1
+                nn1[target] += g * nn0[context_word]  # Update nn1
 
             # Update nn0
             nn0[context_word] += neu1e
