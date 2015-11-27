@@ -45,36 +45,8 @@ class Corpus:
 
         self.tokens = all_tokens
 
+        self.build_ngrams(1)
         self.build_ngrams(2)
-        self.build_ngrams(3)
-        self.build_ngrams(4)
-
-    def combine_tokens_for_ngram(self, ngram):
-
-        all_tokens = []
-        i = 0
-
-        while i < len(self.tokens):
-
-            # Check for ngram in this word and next words
-            j = 0
-            found = True
-            while j < len(ngram.tokens) and found:
-                if len(self.tokens) <= i + j:
-                    found = False
-                else:
-                    if ngram.tokens[j] != self.tokens[i + j]:
-                        found = False
-                j += 1
-
-            if found:
-                all_tokens.append(ngram.get_string())
-                i += len(ngram.tokens)
-            else:
-                all_tokens.append(self.tokens[i])
-                i += 1
-
-        self.tokens = all_tokens
 
     def build_ngrams(self, n):
 
@@ -107,12 +79,12 @@ class Corpus:
             i += 1
             if i % 10000 == 0:
                 sys.stdout.flush()
-                sys.stdout.write("\rBuilding %d-grams: %d" % (n, i))
+                sys.stdout.write("\rBuilding n-grams (%d pass): %d" % (n, i))
 
         sys.stdout.flush()
-        print "\r%d-grams built: %d" % (n, i)
+        print "\rn-grams (%d pass) built: %d" % (n, i)
 
-        filtered_ngrams = []
+        filtered_ngrams_map = {}
 
         # http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf
         i = 0
@@ -120,11 +92,11 @@ class Corpus:
             product = 1
             for word_string in ngram.tokens:
                 product *= token_count_map[word_string]
-            delta = 0
+            delta = 3
             ngram.set_score((float(ngram.count) - delta) / float(product))
 
-            if ngram.score > .5:
-                filtered_ngrams.append(ngram)
+            if ngram.score > .001:
+                filtered_ngrams_map[ngram.get_string()] = ngram
 
             i += 1
             if i % 10000 == 0:
@@ -132,19 +104,34 @@ class Corpus:
                 sys.stdout.write("\rScoring n-grams: %d" % i)
 
         sys.stdout.flush()
-        print "\rScored n-grams: %d, filtered n-grams: %d" % (i, len(filtered_ngrams))
+        print "\rScored n-grams: %d, filtered n-grams: %d" % (i, len(filtered_ngrams_map))
 
+        all_tokens = []
         i = 0
-        for ngram in filtered_ngrams:
-            self.combine_tokens_for_ngram(ngram)
-            i += 1
-            if i % 3 == 0:
-                sys.stdout.flush()
-                sys.stdout.write("\rCombining tokens for n-gram: %s (%d / %d)" % (ngram.get_string(), i, len(filtered_ngrams)))
 
-        sys.stdout.flush()
-        print "\rCombined tokens for n-gram: %d" % i
+        while i < len(self.tokens):
 
+            if i + 1 < len(self.tokens):
+                ngram_l = []
+                ngram_l.append(self.tokens[i])
+                ngram_l.append(self.tokens[i+1])
+                ngram_string = ' '.join(ngram_l)
+
+                if len(ngram_l) == 2 and (ngram_string in filtered_ngrams_map):
+                    ngram = filtered_ngrams_map[ngram_string]
+                    all_tokens.append(ngram.get_string())
+                    i += 2
+                    #print "Combining tokens for n-gram: %s" % ngram.get_string()
+                else:
+                    all_tokens.append(self.tokens[i])
+                    i += 1
+            else:
+                all_tokens.append(self.tokens[i])
+                i += 1
+
+        print "Tokens combined"
+
+        self.tokens = all_tokens
 
     def __getitem__(self, i):
         return self.tokens[i]
@@ -282,7 +269,7 @@ if __name__ == '__main__':
     min_count = 2
 
     # Read the corpus
-    corpus = Corpus('text1-aa')
+    corpus = Corpus('text-large')
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
