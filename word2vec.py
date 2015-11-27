@@ -8,15 +8,17 @@ class Word:
         self.word = word
         self.count = 0
 
-
 class Ngram:
-    def __init__(self, ngrams):
-        self.ngrams = ngrams
+    def __init__(self, tokens):
+        self.tokens = tokens
         self.count = 0
         self.score = 0.0
 
     def set_score(self, score):
         self.score = score
+
+    def get_string(self):
+        return ' '.join(self.tokens)
 
 
 class Corpus:
@@ -43,6 +45,107 @@ class Corpus:
 
         self.tokens = all_tokens
 
+        self.build_ngrams(2)
+        self.build_ngrams(3)
+        self.build_ngrams(4)
+
+    def combine_tokens_for_ngram(self, ngram):
+
+        all_tokens = []
+        i = 0
+
+        while i < len(self.tokens):
+
+            # Check for ngram in this word and next words
+            j = 0
+            found = True
+            while j < len(ngram.tokens) and found:
+                if len(self.tokens) <= i + j:
+                    found = False
+                else:
+                    if ngram.tokens[j] != self.tokens[i + j]:
+                        found = False
+                j += 1
+
+            if found:
+                all_tokens.append(ngram.get_string())
+                i += len(ngram.tokens)
+            else:
+                all_tokens.append(self.tokens[i])
+                i += 1
+
+        self.tokens = all_tokens
+
+    def build_ngrams(self, n):
+
+        ngrams = []
+        ngram_map = {}
+
+        token_count_map = {}
+        for token in self.tokens:
+            if token not in token_count_map:
+                token_count_map[token] = 1
+            else:
+                token_count_map[token] += 1
+
+        i = 0
+        ngram_l = []
+        for token in self.tokens:
+
+            if len(ngram_l) == 2:
+                ngram_l.pop(0)
+
+            ngram_l.append(token)
+            ngram_t = tuple(ngram_l)
+
+            if ngram_t not in ngram_map:
+                ngram_map[ngram_t] = len(ngrams)
+                ngrams.append(Ngram(ngram_t))
+
+            ngrams[ngram_map[ngram_t]].count += 1
+
+            i += 1
+            if i % 10000 == 0:
+                sys.stdout.flush()
+                sys.stdout.write("\rBuilding %d-grams: %d" % (n, i))
+
+        sys.stdout.flush()
+        print "\r%d-grams built: %d" % (n, i)
+
+        filtered_ngrams = []
+
+        # http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf
+        i = 0
+        for ngram in ngrams:
+            product = 1
+            for word_string in ngram.tokens:
+                product *= token_count_map[word_string]
+            delta = 0
+            ngram.set_score((float(ngram.count) - delta) / float(product))
+
+            if ngram.score > .5:
+                filtered_ngrams.append(ngram)
+
+            i += 1
+            if i % 10000 == 0:
+                sys.stdout.flush()
+                sys.stdout.write("\rScoring n-grams: %d" % i)
+
+        sys.stdout.flush()
+        print "\rScored n-grams: %d, filtered n-grams: %d" % (i, len(filtered_ngrams))
+
+        i = 0
+        for ngram in filtered_ngrams:
+            self.combine_tokens_for_ngram(ngram)
+            i += 1
+            if i % 3 == 0:
+                sys.stdout.flush()
+                sys.stdout.write("\rCombining tokens for n-gram: %s (%d / %d)" % (ngram.get_string(), i, len(filtered_ngrams)))
+
+        sys.stdout.flush()
+        print "\rCombined tokens for n-gram: %d" % i
+
+
     def __getitem__(self, i):
         return self.tokens[i]
 
@@ -58,10 +161,6 @@ class Vocabulary:
         self.words = []
         self.word_map = {}
         self.build_words(corpus, min_count)
-
-        self.ngrams = []
-        self.ngram_map = {}
-        self.build_ngrams(corpus, 3)
 
         self.filter_for_rare_and_common()
 
@@ -86,61 +185,6 @@ class Vocabulary:
 
         self.words = words
         self.word_map = word_map # Mapping from each token to its index in vocab
-
-    def build_ngrams(self, corpus, n):
-
-        ngrams = []
-        ngram_map = {}
-
-        # Build ngram map
-        for n in range(2, n + 1):
-            i = 0
-            ngram_l = []
-            for token in corpus:
-                if len(ngram_l) < n:
-                    ngram_l.append(token)
-                    continue
-
-                if len(ngram_l) == n:
-                    ngram_l.pop(0)
-
-                ngram_l.append(token)
-                ngram_t = tuple(ngram_l)
-
-                if ngram_t not in ngram_map:
-                    ngram_map[ngram_t] = len(ngrams)
-                    ngrams.append(Ngram(ngram_t))
-
-                ngrams[ngram_map[ngram_t]].count += 1
-
-                i += 1
-                if i % 10000 == 0:
-                    sys.stdout.flush()
-                    sys.stdout.write("\rBuilding %d-grams: %d" % (n, i))
-
-            sys.stdout.flush()
-            print "\r%d-grams built: %d" % (n, i)
-
-        # http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf
-        i = 0
-        for ngram in ngrams:
-            product = 1
-            for word_string in ngram.ngrams:
-                word = self.words[self.word_map[word_string]]
-                product *= word.count
-            delta = 0
-            ngram.set_score((float(ngram.count) - delta) / float(product))
-
-            i += 1
-            if i % 10000 == 0:
-                sys.stdout.flush()
-                sys.stdout.write("\rScoring n-grams: %d" % i)
-
-        sys.stdout.flush()
-        print "\rScored n-grams: %d" % i
-
-        self.ngrams = ngrams
-        self.ngram_map = ngram_map
 
     def __getitem__(self, i):
         return self.words[i]
@@ -222,6 +266,7 @@ def save(vocab, nn0, filename):
         file_pointer.write('%s %s\n' % (word, vector_str))
     file_pointer.close()
 
+
 if __name__ == '__main__':
 
     # Number of negative examples
@@ -234,10 +279,10 @@ if __name__ == '__main__':
     window = 5
 
     # Min count for words to be used in the model, else {rare}
-    min_count = 5
+    min_count = 2
 
     # Read the corpus
-    corpus = Corpus('text-aa')
+    corpus = Corpus('text1-aa')
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
