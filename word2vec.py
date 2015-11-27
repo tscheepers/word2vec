@@ -17,7 +17,7 @@ class Ngram:
 
 
 class Corpus:
-    def __init__(self, filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold):
+    def __init__(self, filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold, word_phrase_filename):
         i = 0
         file_pointer = open(filename, 'r')
 
@@ -40,10 +40,10 @@ class Corpus:
 
         self.tokens = all_tokens
 
-        for x in range(0,word_phrase_passes):
-            self.build_ngrams(x, word_phrase_delta, word_phrase_threshold)
+        for x in range(1, word_phrase_passes + 1):
+            self.build_ngrams(x, word_phrase_delta, word_phrase_threshold, word_phrase_filename)
 
-    def build_ngrams(self, x, word_phrase_delta, word_phrase_threshold):
+    def build_ngrams(self, x, word_phrase_delta, word_phrase_threshold, word_phrase_filename):
 
         ngrams = []
         ngram_map = {}
@@ -80,6 +80,7 @@ class Corpus:
         print "\rn-grams (%d pass) built: %d" % (x, i)
 
         filtered_ngrams_map = {}
+        file_pointer = open(word_phrase_filename + ('-%d' % x), 'w')
 
         # http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf
         i = 0
@@ -91,6 +92,7 @@ class Corpus:
 
             if ngram.score > word_phrase_threshold:
                 filtered_ngrams_map[ngram.get_string()] = ngram
+                file_pointer.write('%s %d\n' % (ngram.get_string(), ngram.count))
 
             i += 1
             if i % 10000 == 0:
@@ -99,6 +101,7 @@ class Corpus:
 
         sys.stdout.flush()
         print "\rScored n-grams: %d, filtered n-grams: %d" % (i, len(filtered_ngrams_map))
+        file_pointer.close()
 
         # Combining the tokens
         all_tokens = []
@@ -116,7 +119,6 @@ class Corpus:
                     ngram = filtered_ngrams_map[ngram_string]
                     all_tokens.append(ngram.get_string())
                     i += 2
-                    # print "Combining tokens for n-gram: %s" % ngram.get_string()
                 else:
                     all_tokens.append(self.tokens[i])
                     i += 1
@@ -279,7 +281,7 @@ if __name__ == '__main__':
     word_phrase_threshold = 1e-3
 
     # Read the corpus
-    corpus = Corpus('input', word_phrase_passes, word_phrase_delta, word_phrase_threshold)
+    corpus = Corpus('input-large', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
