@@ -26,6 +26,7 @@ class Corpus:
         for line in file_pointer:
             line_tokens = line.split()
             for token in line_tokens:
+                token = token.lower()
                 all_tokens.append(token)
 
                 i += 1
@@ -281,7 +282,7 @@ if __name__ == '__main__':
     word_phrase_threshold = 1e-3
 
     # Read the corpus
-    corpus = Corpus('input-large', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
+    corpus = Corpus('input-10000', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
