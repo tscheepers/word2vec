@@ -13,7 +13,7 @@ class Ngram:
         self.score = score
 
     def get_string(self):
-        return ' '.join(self.tokens)
+        return '_'.join(self.tokens)
 
 
 class Corpus:
@@ -27,7 +27,9 @@ class Corpus:
             line_tokens = line.split()
             for token in line_tokens:
                 token = token.lower()
-                all_tokens.append(token)
+
+                if len(token) > 1 and token.isalnum():
+                    all_tokens.append(token)
 
                 i += 1
                 if i % 10000 == 0:
@@ -43,6 +45,8 @@ class Corpus:
 
         for x in range(1, word_phrase_passes + 1):
             self.build_ngrams(x, word_phrase_delta, word_phrase_threshold, word_phrase_filename)
+
+        self.save_to_file(filename)
 
     def build_ngrams(self, x, word_phrase_delta, word_phrase_threshold, word_phrase_filename):
 
@@ -114,7 +118,7 @@ class Corpus:
                 ngram_l = []
                 ngram_l.append(self.tokens[i])
                 ngram_l.append(self.tokens[i+1])
-                ngram_string = ' '.join(ngram_l)
+                ngram_string = '_'.join(ngram_l)
 
                 if len(ngram_l) == 2 and (ngram_string in filtered_ngrams_map):
                     ngram = filtered_ngrams_map[ngram_string]
@@ -130,6 +134,31 @@ class Corpus:
         print "Tokens combined"
 
         self.tokens = all_tokens
+
+    def save_to_file(self, filename):
+
+        i = 1
+
+        filepointer = open('preprocessed-' + filename, 'w')
+        line = ''
+        for token in self.tokens:
+            if i % 20 == 0:
+                line += token
+                filepointer.write('%s\n' % line)
+                line = ''
+            else:
+                line += token + ' '
+            i += 1
+
+            if i % 10000 == 0:
+                sys.stdout.flush()
+                sys.stdout.write("\rWriting to preprocessed input file")
+
+        sys.stdout.flush()
+        print "\rPreprocessed input file written"
+
+        filepointer.close()
+
 
     def __getitem__(self, i):
         return self.tokens[i]
@@ -252,7 +281,7 @@ def sigmoid(z):
 def save(vocab, nn0, filename):
     file_pointer = open(filename, 'w')
     for token, vector in zip(vocab, nn0):
-        word = token.word
+        word = token.word.replace(' ', '_')
         vector_str = ' '.join([str(s) for s in vector])
         file_pointer.write('%s %s\n' % (word, vector_str))
     file_pointer.close()
@@ -270,7 +299,7 @@ if __name__ == '__main__':
     window = 5
 
     # Min count for words to be used in the model, else {rare}
-    min_count = 2
+    min_count = 5
 
     # Number of word phrase passes
     word_phrase_passes = 2
@@ -282,7 +311,7 @@ if __name__ == '__main__':
     word_phrase_threshold = 1e-3
 
     # Read the corpus
-    corpus = Corpus('input-10000', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
+    corpus = Corpus('input-1000', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
 
     # Read train file to init vocab
     vocab = Vocabulary(corpus, min_count)
