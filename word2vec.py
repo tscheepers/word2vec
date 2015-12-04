@@ -289,88 +289,92 @@ def save(vocab, nn0, filename):
 
 if __name__ == '__main__':
 
-    # Number of negative examples
-    k_negative_sampling = 5
+    for input_filename in ['input-1000', 'input-10000', 'input-100000', 'input-full']:
 
-    # Dimensionality of word embeddings
-    dim = 100
+        # Number of negative examples
+        k_negative_sampling = 5
 
-    # Max window length
-    window = 5
+        # Min count for words to be used in the model, else {rare}
+        min_count = 5
 
-    # Min count for words to be used in the model, else {rare}
-    min_count = 5
+        # Number of word phrase passes
+        word_phrase_passes = 2
 
-    # Number of word phrase passes
-    word_phrase_passes = 2
+        # min count for word phrase formula
+        word_phrase_delta = 3
 
-    # min count for word phrase formula
-    word_phrase_delta = 3
+        # Threshold for something
+        word_phrase_threshold = 1e-3
 
-    # Threshold for something
-    word_phrase_threshold = 1e-3
+        # Read the corpus
+        corpus = Corpus(input_filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
 
-    # Read the corpus
-    corpus = Corpus('input-1000', word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
+        # Read train file to init vocab
+        vocab = Vocabulary(corpus, min_count)
 
-    # Read train file to init vocab
-    vocab = Vocabulary(corpus, min_count)
+        # Max window length
+        for window in [3, 4, 5, 6]:
 
-    # Initialize network
-    nn0 = np.random.uniform(low=-0.5/dim, high=0.5/dim, size=(len(vocab), dim))
-    nn1 = np.zeros(shape=(len(vocab), dim))
+            # Dimensionality of word embeddings
+            for dim in [50, 100, 150]:
 
-    global_word_count = 0
-    table = TableForNegativeSamples(vocab)
+                print "Training: %s-%d-%d" % (input_filename, window, dim)
 
-    # Initial learning rate
-    initial_alpha = 0.025
+                # Initialize network
+                nn0 = np.random.uniform(low=-0.5/dim, high=0.5/dim, size=(len(vocab), dim))
+                nn1 = np.zeros(shape=(len(vocab), dim))
 
-    # Modified in loop
-    alpha = initial_alpha
-    word_count = 0
-    last_word_count = 0
+                global_word_count = 0
+                table = TableForNegativeSamples(vocab)
 
-    tokens = vocab.indices(corpus)
+                # Initial learning rate
+                initial_alpha = 0.025
 
-    for token_idx, token in enumerate(tokens):
-        if word_count % 10000 == 0:
-            global_word_count += (word_count - last_word_count)
-            last_word_count = word_count
+                # Modified in loop
+                alpha = initial_alpha
+                word_count = 0
+                last_word_count = 0
 
-            # Recalculate alpha
-            alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
-            if alpha < initial_alpha * 0.0001:
-                alpha = initial_alpha * 0.0001
+                tokens = vocab.indices(corpus)
 
-            sys.stdout.flush()
-            sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
+                for token_idx, token in enumerate(tokens):
+                    if word_count % 10000 == 0:
+                        global_word_count += (word_count - last_word_count)
+                        last_word_count = word_count
 
-        # Randomize window size, where win is the max window size
-        current_window = np.random.randint(low=1, high=window+1)
-        context_start = max(token_idx - current_window, 0)
-        context_end = min(token_idx + current_window + 1, len(tokens))
-        context = tokens[context_start:token_idx] + tokens[token_idx+1:context_end] # Turn into an iterator?
+                        # Recalculate alpha
+                        alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
+                        if alpha < initial_alpha * 0.0001:
+                            alpha = initial_alpha * 0.0001
 
-        for context_word in context:
-            # Init neu1e with zeros
-            neu1e = np.zeros(dim)
-            classifiers = [(token, 1)] + [(target, 0) for target in table.sample(k_negative_sampling)]
-            for target, label in classifiers:
-                z = np.dot(nn0[context_word], nn1[target])
-                p = sigmoid(z)
-                g = alpha * (label - p)
-                neu1e += g * nn1[target]              # Error to backpropagate to nn0
-                nn1[target] += g * nn0[context_word]  # Update nn1
+                        sys.stdout.flush()
+                        sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
 
-            # Update nn0
-            nn0[context_word] += neu1e
+                    # Randomize window size, where win is the max window size
+                    current_window = np.random.randint(low=1, high=window+1)
+                    context_start = max(token_idx - current_window, 0)
+                    context_end = min(token_idx + current_window + 1, len(tokens))
+                    context = tokens[context_start:token_idx] + tokens[token_idx+1:context_end] # Turn into an iterator?
 
-        word_count += 1
+                    for context_word in context:
+                        # Init neu1e with zeros
+                        neu1e = np.zeros(dim)
+                        classifiers = [(token, 1)] + [(target, 0) for target in table.sample(k_negative_sampling)]
+                        for target, label in classifiers:
+                            z = np.dot(nn0[context_word], nn1[target])
+                            p = sigmoid(z)
+                            g = alpha * (label - p)
+                            neu1e += g * nn1[target]              # Error to backpropagate to nn0
+                            nn1[target] += g * nn0[context_word]  # Update nn1
 
-    global_word_count += (word_count - last_word_count)
-    sys.stdout.flush()
-    print "\rTraining finished: %d" % global_word_count
+                        # Update nn0
+                        nn0[context_word] += neu1e
 
-    # Save model to file
-    save(vocab, nn0, 'output')
+                    word_count += 1
+
+                global_word_count += (word_count - last_word_count)
+                sys.stdout.flush()
+                print "\rTraining finished: %d" % global_word_count
+
+                # Save model to file
+                save(vocab, nn0, 'output-%s-%d-%d' % (input_filename, window, dim))
