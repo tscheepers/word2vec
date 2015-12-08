@@ -289,48 +289,48 @@ def save(vocab, nn0, filename):
 
 if __name__ == '__main__':
 
-    for input_filename in ['input-1000', 'input-10000', 'input-100000', 'input-full']:
+    for input_filename in ['input-full.txt']:
+    #for input_filename in ['news-2012-phrases-10000.txt']:
 
         # Number of negative examples
         k_negative_sampling = 5
 
         # Min count for words to be used in the model, else {rare}
-        min_count = 5
+        min_count = 3
 
         # Number of word phrase passes
-        word_phrase_passes = 2
+        word_phrase_passes = 3 # 3
 
         # min count for word phrase formula
-        word_phrase_delta = 3
+        word_phrase_delta = 3 # 5
 
-        # Threshold for something
-        word_phrase_threshold = 1e-3
+        # Threshold for word phrase creation
+        word_phrase_threshold = 1e-4
 
         # Read the corpus
-        corpus = Corpus(input_filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases')
+        corpus = Corpus(input_filename, word_phrase_passes, word_phrase_delta, word_phrase_threshold, 'phrases-%s' % input_filename)
 
         # Read train file to init vocab
         vocab = Vocabulary(corpus, min_count)
+        table = TableForNegativeSamples(vocab)
 
         # Max window length
-        for window in [3, 4, 5, 6]:
+        for window in [5]: # 5 for large set
 
             # Dimensionality of word embeddings
-            for dim in [50, 100, 150]:
+            for dim in [100]: # 100
 
-                print "Training: %s-%d-%d" % (input_filename, window, dim)
+                print "Training: %s-%d-%d-%d" % (input_filename, window, dim, word_phrase_passes)
 
                 # Initialize network
                 nn0 = np.random.uniform(low=-0.5/dim, high=0.5/dim, size=(len(vocab), dim))
                 nn1 = np.zeros(shape=(len(vocab), dim))
 
-                global_word_count = 0
-                table = TableForNegativeSamples(vocab)
-
                 # Initial learning rate
-                initial_alpha = 0.025
+                initial_alpha = 0.01 # 0.01
 
                 # Modified in loop
+                global_word_count = 0
                 alpha = initial_alpha
                 word_count = 0
                 last_word_count = 0
@@ -343,9 +343,9 @@ if __name__ == '__main__':
                         last_word_count = word_count
 
                         # Recalculate alpha
-                        alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
-                        if alpha < initial_alpha * 0.0001:
-                            alpha = initial_alpha * 0.0001
+                        # alpha = initial_alpha * (1 - float(global_word_count) / len(corpus))
+                        # if alpha < initial_alpha * 0.0001:
+                        #     alpha = initial_alpha * 0.0001
 
                         sys.stdout.flush()
                         sys.stdout.write("\rTraining: %d of %d" % (global_word_count, len(corpus)))
@@ -377,4 +377,4 @@ if __name__ == '__main__':
                 print "\rTraining finished: %d" % global_word_count
 
                 # Save model to file
-                save(vocab, nn0, 'output-%s-%d-%d' % (input_filename, window, dim))
+                save(vocab, nn0, 'output-%s-%d-%d-%d' % (input_filename, window, dim, word_phrase_passes))
